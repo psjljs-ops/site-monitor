@@ -53,8 +53,16 @@ travel-trend-tracker에서 쓰는 봇 토큰과 chat id를 그대로 써도 됩�
 
 방문자 수는 1시간에 한 번 갱신됩니다.
 
+## 5. 정확한 5분 주기 (cron-job.org)
+
+GitHub 자체 예약 실행은 한 시간에 한 번꼴로 드물게 돌 때가 많아, cron-job.org가 5분마다 워크플로를 실행합니다.
+
+- cron-job.org 작업 `site-monitor check`: 5분마다 `POST https://api.github.com/repos/psjljs-ops/site-monitor/actions/workflows/monitor.yml/dispatches`, 본문 `{"ref":"main"}`
+- 헤더: `Accept: application/vnd.github+json`, `Content-Type: application/json`, `Authorization: Bearer <토큰>`
+- 토큰: GitHub fine-grained 토큰 `site-monitor cron` (site-monitor 저장소의 Actions 읽기/쓰기만, 만료 없음). 토큰을 지우거나 바꾸면 cron-job.org의 Authorization 값도 바꿔야 합니다.
+
 ## 참고
 
-- GitHub의 예약 실행은 붐비는 시간에 몇 분~십여 분 늦어질 수 있습니다. 점검이 30분 넘게 멈추면 대시보드 상단에 표시됩니다.
+- `monitor.yml`의 GitHub 예약 실행은 cron-job.org가 멈췄을 때를 위한 예비로 남겨 두었습니다. 점검이 30분 넘게 멈추면 대시보드 상단에 표시됩니다.
 - 점검 결과는 `docs/data/`에 커밋되며 응답 기록은 7일, 장애 기록은 최근 30건을 보관합니다.
 - 로컬에서 한 번 돌려보기: `python monitor.py` (결과는 `docs/data/`에 생김)
