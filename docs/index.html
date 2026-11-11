@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>사이트 상황판</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* 레이아웃: 상단 종합 상태 띠 → 사이트별 패널(지표 행 + 응답시간 차트 + 24시간 가동 막대) → 장애 기록 */
+:root {
+  --bg: #f4f6f8; --panel: #ffffff; --line: #dfe4ea; --grid: #edf0f3;
+  --fg: #16202b; --fg2: #4f5d6b; --muted: #7c8996;
+  --accent: #2864c8; --accent-soft: rgba(40,100,200,.12);
+  --good: #1f8a4c; --good-bg: #e3f4ea; --warn: #b36b00; --warn-bg: #fdf0db;
+  --bad: #c62f2f; --bad-bg: #fbe5e5; --none: #d5dbe1;
+  --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f141a; --panel: #161d25; --line: #263039; --grid: #1e262f;
+  --fg: #e6ebf0; --fg2: #a6b2be; --muted: #788694;
+  --accent: #6ea0f0; --accent-soft: rgba(110,160,240,.16);
+  --good: #4cc47e; --good-bg: #133225; --warn: #e5a23c; --warn-bg: #36280f;
+  --bad: #f06a6a; --bad-bg: #3a1a1c; --none: #2c3640; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #161d25; --line: #263039; --grid: #1e262f;
+  --fg: #e6ebf0; --fg2: #a6b2be; --muted: #788694;
+  --accent: #6ea0f0; --accent-soft: rgba(110,160,240,.16);
+  --good: #4cc47e; --good-bg: #133225; --warn: #e5a23c; --warn-bg: #36280f;
+  --bad: #f06a6a; --bad-bg: #3a1a1c; --none: #2c3640; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.55 var(--sans); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 20px; }
+h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+h2 { font-size: 15px; font-weight: 600; margin: 0; }
+a { color: var(--accent); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; justify-content: space-between; }
+header p { margin: 4px 0 0; color: var(--fg2); }
+.banner { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 10px; font-weight: 600; font-size: 15px; }
+.banner.ok { background: var(--good-bg); color: var(--good); }
+.banner.bad { background: var(--bad-bg); color: var(--bad); }
+.banner.warn { background: var(--warn-bg); color: var(--warn); }
+.banner small { font-weight: 400; color: var(--fg2); margin-left: auto; }
+.sample { padding: 10px 14px; border: 1px dashed var(--warn); border-radius: 8px; color: var(--warn); }
+.sites { display: grid; gap: 16px; }
+.site { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: grid; gap: 16px; min-width: 0; }
+.site.down { border-color: var(--bad); }
+.top { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.top .url { color: var(--fg2); font-size: 13px; overflow-wrap: anywhere; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.up { background: var(--good-bg); color: var(--good); }
+.pill.slow { background: var(--warn-bg); color: var(--warn); }
+.pill.down { background: var(--bad-bg); color: var(--bad); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.stat { display: grid; gap: 2px; }
+.stat .k { font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.stat .v { font-family: var(--mono); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .v.bad { color: var(--bad); } .stat .v.warn { color: var(--warn); }
+.charts { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+@media (max-width: 720px) { .charts { grid-template-columns: 1fr; } }
+.chart { position: relative; min-width: 0; }
+.chart .cap { font-size: 12px; color: var(--fg2); margin-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--muted); font: 10px var(--mono); }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); padding: 5px 8px; border-radius: 6px; font: 12px var(--mono); white-space: nowrap; transform: translate(-50%, -100%); z-index: 2; }
+.strip { display: grid; grid-template-columns: repeat(48, 1fr); gap: 2px; height: 26px; }
+.strip i { border-radius: 2px; background: var(--none); }
+.strip i.g { background: var(--good); } .strip i.w { background: var(--warn); } .strip i.b { background: var(--bad); }
+.strip-axis { display: flex; justify-content: space-between; font: 10px var(--mono); color: var(--muted); margin-top: 4px; }
+.incidents { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: grid; gap: 10px; }
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; }
+td.reason { white-space: normal; color: var(--fg2); }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--fg2); flex-wrap: wrap; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+@media (prefers-reduced-motion: no-preference) { .pill.down::before { animation: blink 1.2s infinite; } }
+@keyframes blink { 50% { opacity: .25; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>사이트 상황판</h1>
+      <p>5분마다 GitHub Actions가 점검합니다 · <span id="updated" class="num">불러오는 중…</span></p>
+    </div>
+    <div class="legend">
+      <span style="--c:var(--good)">정상</span><span style="--c:var(--warn)">느림·일부 실패</span><span style="--c:var(--bad)">다운</span><span style="--c:var(--none)">기록 없음</span>
+    </div>
+  </header>
+  <div id="sample" class="sample" hidden>아직 점검 기록이 없어 예시 데이터를 보여주고 있습니다. 첫 점검이 끝나면 실제 데이터로 바뀝니다.</div>
+  <div id="banner" class="banner ok">상태 확인 중…</div>
+  <section id="sites" class="sites"></section>
+  <section class="incidents">
+    <h2>장애 기록</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>사이트</th><th>시작</th><th>복구</th><th>지속</th><th>원인</th></tr></thead>
+      <tbody id="inc"></tbody>
+    </table></div>
+  </section>
+</div>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtTime = d => new Date(d).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const ago = d => { const m = Math.round((Date.now() - new Date(d)) / 60000); return m < 1 ? "방금" : m < 60 ? m + "분 전" : m < 1440 ? Math.floor(m / 60) + "시간 전" : Math.floor(m / 1440) + "일 전"; };
+const dur = s => s < 3600 ? Math.max(1, Math.round(s / 60)) + "분" : s < 86400 ? Math.floor(s / 3600) + "시간 " + Math.round(s % 3600 / 60) + "분" : Math.floor(s / 86400) + "일 " + Math.floor(s % 86400 / 3600) + "시간";
+
+function sampleData() {
+  const now = Math.floor(Date.now() / 1000), hist = {}, names = ["예시 사이트 A", "예시 사이트 B"];
+  names.forEach((n, k) => {
+    const pts = [];
+    for (let t = now - 86400; t <= now; t += 300) {
+      const down = k === 1 && t > now - 30000 && t < now - 28200;
+      pts.push([t, down ? 0 : Math.round(260 + 140 * Math.sin(t / 5000 + k) + Math.random() * 90 + k * 180), down ? 0 : 1]);
+    }
+    hist[n] = pts;
+  });
+  const iso = s => new Date(s * 1000).toISOString();
+  return {
+    status: {
+      updated: iso(now), order: names,
+      sites: {
+        [names[0]]: { name: names[0], url: "https://example.com", up: true, code: 200, ms: 312, uptime24h: 100, uptime7d: 99.93, sslDays: 71, since: iso(now - 9 * 86400), checked: iso(now),
+          visitors: { total7d: 1284, daily: [150, 171, 203, 188, 162, 214, 196].map((c, i) => ({ day: "d" + i, count: c })) } },
+        [names[1]]: { name: names[1], url: "https://example.org", up: true, code: 200, ms: 640, uptime24h: 97.92, uptime7d: 99.7, sslDays: 12, since: iso(now - 28200), checked: iso(now), visitors: null },
+      },
+      incidents: [{ site: names[1], start: iso(now - 30000), end: iso(now - 28200), reason: "HTTP 503" }],
+    },
+    history: hist,
+  };
+}
+
+async function load() {
+  try {
+    const [s, h] = await Promise.all(["data/status.json", "data/history.json"].map(u => fetch(u + "?t=" + Date.now()).then(r => { if (!r.ok) throw 0; return r.json(); })));
+    return { status: s, history: h, sample: false };
+  } catch { return { ...sampleData(), sample: true }; }
+}
+
+function stateOf(s) { return !s.up ? "down" : s.slow ? "slow" : "up"; }
+const LABEL = { up: "정상", slow: "느림", down: "다운" };
+
+function lineChart(pts, now) {
+  const W = 600, H = 150, L = 40, R = 8, T = 8, B = 20, from = now - 86400;
+  const p = pts.filter(q => q[0] >= from);
+  const okMs = p.filter(q => q[2]).map(q => q[1]);
+  const max = Math.max(500, ...okMs);
+  const step = max > 4000 ? 2000 : max > 2000 ? 1000 : max > 1000 ? 500 : 250;
+  const top = Math.ceil(max / step) * step;
+  const x = t => L + (t - from) / 86400 * (W - L - R), y = v => T + (1 - v / top) * (H - T - B);
+  let g = "";
+  for (let v = 0; v <= top; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${v >= 1000 ? v / 1000 + "s" : v}</text>`;
+  for (let hr = 0; hr <= 24; hr += 6) { const t = from + hr * 3600; g += `<text x="${x(t)}" y="${H - 4}" text-anchor="middle">${hr === 24 ? "지금" : "-" + (24 - hr) + "h"}</text>`; }
+  // 다운 구간 음영
+  let shade = "";
+  p.forEach((q, i) => { if (!q[2]) { const nx = p[i + 1] ? p[i + 1][0] : q[0] + 300; shade += `<rect x="${x(q[0])}" y="${T}" width="${Math.max(2, x(nx) - x(q[0]))}" height="${H - T - B}" fill="var(--bad)" opacity=".18"/>`; } });
+  // 선: 다운 지점에서 끊김
+  let d = "", area = "", seg = [];
+  const flush = () => { if (seg.length) { d += "M" + seg.map(s => s.join(",")).join("L"); area += `M${seg[0][0]},${y(0)}L` + seg.map(s => s.join(",")).join("L") + `L${seg[seg.length - 1][0]},${y(0)}Z`; } seg = []; };
+  p.forEach(q => { if (q[2]) seg.push([x(q[0]).toFixed(1), y(q[1]).toFixed(1)]); else flush(); });
+  flush();
+  const last = p.filter(q => q[2]).pop();
+  const dot = last ? `<circle cx="${x(last[0])}" cy="${y(last[1])}" r="4" fill="var(--accent)" stroke="var(--panel)" stroke-width="2"/>` : "";
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="최근 24시간 응답 시간">${g}${shade}<path d="${area}" fill="var(--accent-soft)"/><path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>${dot}<line class="cross" y1="${T}" y2="${H - B}" stroke="var(--fg2)" stroke-dasharray="3 3" visibility="hidden"/><rect class="hit" x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent"/></svg>`;
+  return { svg, p, x, from, W, L, R };
+}
+
+function bindHover(box, c) {
+  const svg = $("svg", box), tip = $(".tip", box), cross = $(".cross", svg);
+  $(".hit", svg).addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * c.W;
+    const t = c.from + (sx - c.L) / (c.W - c.L - c.R) * 86400;
+    let best = null; for (const q of c.p) if (!best || Math.abs(q[0] - t) < Math.abs(best[0] - t)) best = q;
+    if (!best) return;
+    const px = c.x(best[0]);
+    cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("visibility", "visible");
+    tip.hidden = false; tip.style.left = (px / c.W * r.width) + "px"; tip.style.top = "18px";
+    tip.textContent = `${fmtTime(best[0] * 1000)} · ${best[2] ? best[1] + "ms" : "다운"}`;
+  });
+  $(".hit", svg).addEventListener("mouseleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); });
+}
+
+function strip(pts, now) {
+  let html = "";
+  for (let i = 0; i < 48; i++) {
+    const a = now - 86400 + i * 1800, b = a + 1800, q = pts.filter(p => p[0] >= a && p[0] < b);
+    const ok = q.filter(p => p[2]).length, cls = !q.length ? "" : ok === q.length ? "g" : ok === 0 ? "b" : "w";
+    const tt = q.length ? `${fmtTime(a * 1000)} · 가동 ${Math.round(100 * ok / q.length)}% (${q.length}회 점검)` : `${fmtTime(a * 1000)} · 기록 없음`;
+    html += `<i class="${cls}" title="${tt}"></i>`;
+  }
+  return html;
+}
+
+function visitorBars(v) {
+  const d = v.daily.slice(-7), max = Math.max(1, ...d.map(x => x.count)), W = 200, H = 56, bw = W / 7;
+  return `<svg viewBox="0 0 ${W} ${H + 14}" role="img" aria-label="최근 7일 방문자">` + d.map((x, i) => {
+    const h = Math.max(2, x.count / max * H);
+    return `<rect x="${i * bw + 2}" y="${H - h}" width="${bw - 4}" height="${h}" rx="3" fill="var(--accent)"><title>${esc(x.day)}: ${x.count}명</title></rect>`;
+  }).join("") + `<text x="0" y="${H + 12}">7일 전</text><text x="${W}" y="${H + 12}" text-anchor="end">오늘</text></svg>`;
+}
+
+function render({ status, history, sample }) {
+  $("#sample").hidden = !sample;
+  const now = Math.floor(new Date(status.updated).getTime() / 1000);
+  $("#updated").textContent = "마지막 점검 " + fmtTime(status.updated) + " (" + ago(status.updated) + ")";
+  const sites = (status.order || Object.keys(status.sites)).map(n => status.sites[n]).filter(Boolean);
+  const down = sites.filter(s => !s.up), slow = sites.filter(s => s.up && s.slow);
+  const stale = (Date.now() - new Date(status.updated)) / 60000 > 30;
+  const b = $("#banner");
+  if (down.length) { b.className = "banner bad"; b.innerHTML = `${down.length}개 사이트 다운: ${down.map(s => esc(s.name)).join(", ")}`; }
+  else if (slow.length) { b.className = "banner warn"; b.innerHTML = `${slow.length}개 사이트 응답 느림`; }
+  else { b.className = "banner ok"; b.innerHTML = `모든 사이트 정상 (${sites.length}개)`; }
+  if (stale && !sample) b.innerHTML += `<small>점검이 30분 넘게 멈춰 있습니다. Actions 탭을 확인하세요</small>`;
+
+  const box = $("#sites"); box.innerHTML = "";
+  sites.forEach(s => {
+    const st = stateOf(s), pts = history[s.name] || [], c = lineChart(pts, now);
+    const ssl = s.sslDays == null ? "–" : s.sslDays + "일";
+    const sslCls = s.sslDays != null && s.sslDays <= 7 ? "bad" : s.sslDays != null && s.sslDays <= 14 ? "warn" : "";
+    const upCls = v => v == null ? "" : v < 99 ? "bad" : v < 99.9 ? "warn" : "";
+    const el = document.createElement("article");
+    el.className = "site" + (st === "down" ? " down" : "");
+    el.innerHTML = `
+      <div class="top"><h2>${esc(s.name)}</h2><span class="pill ${st}">${LABEL[st]}</span>
+        <a class="url" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a>
+        <span class="muted" style="margin-left:auto;font-size:12px">${st === "down" ? "다운 " : "정상 유지 "}${dur(Math.max(60, (Date.now() - new Date(s.since)) / 1000))}째</span></div>
+      ${st === "down" ? `<div class="banner bad" style="font-size:13px">원인: ${esc(s.error || "응답 없음")}</div>` : ""}
+      <div class="stats">
+        <div class="stat"><span class="k">현재 응답</span><span class="v ${s.slow ? "warn" : ""}">${s.ms != null ? s.ms + "ms" : "–"}</span></div>
+        <div class="stat"><span class="k">HTTP 코드</span><span class="v ${st === "down" ? "bad" : ""}">${s.code ?? "–"}</span></div>
+        <div class="stat"><span class="k">가동률 24시간</span><span class="v ${upCls(s.uptime24h)}">${s.uptime24h ?? "–"}%</span></div>
+        <div class="stat"><span class="k">가동률 7일</span><span class="v ${upCls(s.uptime7d)}">${s.uptime7d ?? "–"}%</span></div>
+        <div class="stat"><span class="k">SSL 만료까지</span><span class="v ${sslCls}">${ssl}</span></div>
+        <div class="stat"><span class="k">방문자 7일</span><span class="v">${s.visitors ? s.visitors.total7d.toLocaleString() : "–"}</span></div>
+      </div>
+      <div class="charts">
+        <div class="chart rt"><div class="cap"><span>응답 시간 · 최근 24시간</span><span class="muted">빨간 음영 = 다운</span></div>${c.svg}<div class="tip" hidden></div></div>
+        <div class="chart"><div class="cap"><span>방문자 · 최근 7일</span></div>${s.visitors ? visitorBars(s.visitors) : `<p class="muted" style="margin:0;font-size:13px">방문자 통계를 보려면 GoatCounter를 연결하세요 (README 참고).</p>`}</div>
+      </div>
+      <div><div class="cap" style="font-size:12px;color:var(--fg2);margin-bottom:6px">가동 기록 · 30분 단위 48칸</div><div class="strip">${strip(pts, now)}</div>
+        <div class="strip-axis"><span>24시간 전</span><span>12시간 전</span><span>지금</span></div></div>`;
+    box.appendChild(el);
+    bindHover($(".rt", el), c);
+  });
+
+  const inc = status.incidents || [];
+  $("#inc").innerHTML = inc.length ? inc.map(i => {
+    const end = i.end ? new Date(i.end) : new Date(), sec = (end - new Date(i.start)) / 1000;
+    return `<tr><td>${esc(i.site)}</td><td class="num">${fmtTime(i.start)}</td><td class="num">${i.end ? fmtTime(i.end) : '<span class="pill down">진행 중</span>'}</td><td class="num">${dur(sec)}</td><td class="reason">${esc(i.reason)}</td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="muted">기록된 장애가 없습니다.</td></tr>`;
+}
+
+async function tick() { render(await load()); }
+tick();
+setInterval(tick, 60000);
+</script>
+</body>
+</html>
