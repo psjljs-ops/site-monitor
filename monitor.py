@@ -168,7 +168,7 @@ def main():
             "uptime24h": uptime(pts, ts - 86400), "uptime7d": uptime(pts, cutoff),
             "sslDays": prev.get("sslDays"), "visitors": prev.get("visitors"),
         }
-        if hour_check or "sslDays" not in prev:
+        if hour_check or "sslDays" not in prev or (site.get("goatcounter") and not prev.get("visitors")):
             cur["sslDays"] = ssl_days_left(url)
             v = visitors(site.get("goatcounter"))
             if v is not None:
