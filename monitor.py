@@ -100,16 +100,24 @@ def visitors(code):
     token = os.environ.get(f"GOATCOUNTER_TOKEN_{code.upper()}") or os.environ.get("GOATCOUNTER_TOKEN")
     if not token:
         return None
-    end = now()
-    start = end - timedelta(days=7)
-    q = urllib.parse.urlencode({"start": start.strftime("%Y-%m-%d"), "end": end.strftime("%Y-%m-%d")})
-    req = urllib.request.Request(f"https://{code}.goatcounter.com/api/v0/stats/total?{q}",
-                                 headers={"Authorization": f"Bearer {token}", "User-Agent": UA})
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            body = json.loads(r.read())
-    except Exception as e:
-        print(f"  ! GoatCounter {code}: {e}")
+    # API는 정각으로 맞춘 RFC3339 시각을 받는다
+    end = now().replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    start = (end - timedelta(days=7)).replace(hour=0)
+    q = urllib.parse.urlencode({"start": iso(start), "end": iso(end)})
+    body = None
+    for url in (f"https://{code}.goatcounter.com/api/v0/stats/total?{q}",
+                f"https://{code}.goatcounter.com/api/v0/stats/total"):   # 기본 기간(최근 1주)으로 재시도
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "User-Agent": UA,
+                                                   "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                body = json.loads(r.read())
+            break
+        except urllib.error.HTTPError as e:
+            print(f"  ! GoatCounter {code}: HTTP {e.code} {e.read().decode('utf-8', 'replace')[:200]}")
+        except Exception as e:
+            print(f"  ! GoatCounter {code}: {e}")
+    if body is None:
         return None
     daily = [{"day": s.get("day"), "count": s.get("daily", 0)} for s in body.get("stats", [])]
     return {"total7d": body.get("total", sum(d["count"] for d in daily)), "daily": daily}
