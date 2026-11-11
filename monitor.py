@@ -94,8 +94,11 @@ def ssl_days_left(url):
 
 def visitors(code):
     """GoatCounter 최근 7일 일별 방문 수. 설정이 없거나 실패하면 None."""
-    token = os.environ.get("GOATCOUNTER_TOKEN")
-    if not code or not token:
+    if not code:
+        return None
+    # 사이트별 토큰(GOATCOUNTER_TOKEN_PICKCHART 등)이 있으면 우선, 없으면 공용 토큰
+    token = os.environ.get(f"GOATCOUNTER_TOKEN_{code.upper()}") or os.environ.get("GOATCOUNTER_TOKEN")
+    if not token:
         return None
     end = now()
     start = end - timedelta(days=7)
